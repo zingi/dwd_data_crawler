@@ -49,6 +49,10 @@ const REPORT_CRAWL_RETRY_WAIT_MINUTES = processenv('REPORT_CRAWL_RETRY_WAIT_MINU
 const REPORT_COMPLETE_CYCLE_WAIT_MINUTES = processenv('REPORT_COMPLETE_CYCLE_WAIT_MINUTES') || 30
 const LOG_LEVEL = String(processenv('LOG_LEVEL') || 'info')
 
+const ENABLE_REPORT_DOWNLOAD = (process.env.ENABLE_REPORT_DOWNLOAD || 'true').toLowerCase() === 'true'
+const ENABLE_FORECAST_DOWNLOAD = (process.env.ENABLE_FORECAST_DOWNLOAD || 'true').toLowerCase() === 'true'
+const ENABLE_COSMO_DOWNLOAD = (process.env.ENABLE_COSMO_DOWNLOAD || 'true').toLowerCase() === 'true'
+
 // Instantiate logger
 const log = bunyan.createLogger({
   name: 'dwd_data_crawler',
@@ -359,7 +363,7 @@ async function crawlMOSMIXasKMZ () {
 /**
  * COSMO_D2Main asynchronously downloads the COSMO D2 data in an endless lookup
  */
-async function cosmoD2Main () {
+async function cosmoDeMain () {
   log.info('start crawling COSMO-D2-forecasts')
   for (;;) {
     // Using the IP address instead of domain is necessary as with each https
@@ -455,6 +459,6 @@ async function cosmoD2Main () {
 }
 
 // Start three concurrent loops to query MOSMIX, COSMO-D2 and measurement data
-crawlMOSMIXasKMZ()
-cosmoD2Main()
-reportMain()
+if (ENABLE_FORECAST_DOWNLOAD) crawlMOSMIXasKMZ()
+if (ENABLE_COSMO_DOWNLOAD) cosmoDeMain()
+if (ENABLE_REPORT_DOWNLOAD) reportMain()

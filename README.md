@@ -44,11 +44,18 @@ following environment variables are supported:
  * `REPORT_COMPLETE_CYCLE_WAIT_MINUTES`: Number of **minutes** to wait before start next
  crawl cycle for report data, once the current cycle is finished. This is an optional parameter.
  Standard value is `30`.
+ * `ENABLE_REPORT_DOWNLOAD`: Start reportMain() loop. Standard value is: `true`.
+ * `ENABLE_FORECAST_DOWNLOAD`: Start forecastMain() loop. Standard value is: `true`
+ * `ENABLE_COSMO_DOWNLOAD`: Start cosmoDeMain() loop. Standard value is: `true`.
 * `LOG_LEVEL`: The [log level](https://github.com/trentm/node-bunyan#levels) to be used for this service instance. This is an optional parameter. Standard value is `info`.
 
 Sample call to run with standard settings for optional parameters:
 ```
-$ DOWNLOAD_DIRECTORY_BASE_PATH=/mnt/download_volume node index.js
+$ DOWNLOAD_DIRECTORY_BASE_PATH=/mnt/download_volume npm start
+```
+Sample call to only download reports data:
+```
+$ DOWNLOAD_DIRECTORY_BASE_PATH=/mnt/download_volume npm run startReportDownload
 ```
 
 ## Basic idea
