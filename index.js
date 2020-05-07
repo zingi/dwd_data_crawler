@@ -23,8 +23,8 @@ const EXIT_CODES = {
 
 const { promisify } = require('util')
 const _ = require('lodash')
-const dwd_grib = require('./lib/dwd_grib')
-const dwd_csv = require('./lib/dwd_csv')
+const dwdGrib = require('./lib/dwd_grib')
+const dwdCsv = require('./lib/dwd_csv')
 const delay = require('delay')
 const fs = require('fs-extra')
 const processenv = require('processenv')
@@ -34,7 +34,7 @@ const lookup = promisify(require('dns').lookup)
 const { URL } = require('url')
 const execFile = promisify(require('child_process').execFile)
 const moment = require('moment-timezone')
-var bunyan = require('bunyan')
+const bunyan = require('bunyan')
 
 const DWD_COSMO_D2_BASE_URL = 'https://opendata.dwd.de/weather/nwp/cosmo-d2/grib/'
 const DWD_MOSMIX_BASE_URL = 'https://opendata.dwd.de/weather/local_forecasts/mos/MOSMIX_L/single_stations/'
@@ -50,7 +50,7 @@ const REPORT_COMPLETE_CYCLE_WAIT_MINUTES = processenv('REPORT_COMPLETE_CYCLE_WAI
 const LOG_LEVEL = String(processenv('LOG_LEVEL') || 'info')
 
 // Instantiate logger
-var log = bunyan.createLogger({
+const log = bunyan.createLogger({
   name: 'dwd_data_crawler',
   serializers: bunyan.stdSerializers,
   level: LOG_LEVEL
@@ -87,7 +87,7 @@ if (_.isNil(DOWNLOAD_DIRECTORY_BASE_PATH)) {
 async function convertDomainUrlToIPUrl (domainUrlString) {
   const domainUrl = new URL(domainUrlString)
 
-  var ip = await lookup(domainUrl.hostname)
+  let ip = await lookup(domainUrl.hostname)
   ip = ip.address
   domainUrl.hostname = ip
   return domainUrl.toString()
@@ -102,7 +102,7 @@ async function convertDomainUrlToIPUrl (domainUrlString) {
  * @return
  */
 async function downloadFile (url) {
-  var attempts = 0
+  let attempts = 0
   for (;;) {
     try {
       const result = await request({
@@ -137,23 +137,24 @@ async function reportMain () {
     // resvolving domain names to IP addresses
     // --> work around: query IP once per cyclce and perform http requests based
     // on the IP instead of the domain name
+    let ipBaseUrl = null
     try {
-      var ipBaseUrl = await convertDomainUrlToIPUrl(DWD_REPORT_BASE_URL)
+      ipBaseUrl = await convertDomainUrlToIPUrl(DWD_REPORT_BASE_URL)
     } catch (error) {
       log.error(error, 'resolving IP-address for DWD_REPORT_BASE_URL failed')
       await delay(REPORT_CRAWL_RETRY_WAIT_MINUTES * 60 * 1000)
       continue
     }
 
-    var listOfFiles = null
-    var numberOfFilesDownloaded = 0
+    let listOfFiles = null
+    let numberOfFilesDownloaded = 0
 
     // step 1: crawl list of available grib files
     for (;;) {
       log.info('crawling list of available files at ' + ipBaseUrl + ' ...')
 
       try {
-        listOfFiles = await dwd_grib.crawlListOfFilePaths(ipBaseUrl)
+        listOfFiles = await dwdGrib.crawlListOfFilePaths(ipBaseUrl)
         break
       } catch (error) {
         log.error(error, 'crawling list of report files failed')
@@ -166,15 +167,17 @@ async function reportMain () {
     log.info('crawling for reports revealed ' + listOfFiles.length + ' files')
 
     // step 2: download
-    for (var i = 0; i < listOfFiles.length; i++) {
+    for (let i = 0; i < listOfFiles.length; i++) {
       // wait before processing next file
       await delay(1)
-
       const url = listOfFiles[i]
+      let textContent = null
+      let table = null
+
       try {
-        var binaryContent = await downloadFile(url)
-        var textContent = binaryContent.toString('utf8')
-        var table = dwd_csv.parseCSV(textContent)
+        const binaryContent = await downloadFile(url)
+        textContent = binaryContent.toString('utf8')
+        table = dwdCsv.parseCSV(textContent)
       } catch (error) {
         log.error({ error: error, url: url }, 'an error occured while downloading and parsing ' + url)
         continue
@@ -182,10 +185,12 @@ async function reportMain () {
       numberOfFilesDownloaded = numberOfFilesDownloaded + 1
 
       // iterate all content lines and extract dates
-      var dates = {}
+      let dates = {}
       _.forEach(table.slice(3), (row) => {
+        let m = null
+
         try {
-          var m = moment.tz(row[0], 'DD.MM.YYYY', 'UTC')
+          m = moment.tz(row[0], 'DD.MM.YYYY', 'UTC')
         } catch (error) {
           log.error({ error: error, url: url }, 'an error occured while handling the csv file')
           return
@@ -201,7 +206,7 @@ async function reportMain () {
 
       dates = _.keys(dates)
 
-      for (var j = 0; j < dates.length; j++) {
+      for (let j = 0; j < dates.length; j++) {
         const dateString = dates[j]
         const urlTokens = url.split('/')
         const fileName = urlTokens[urlTokens.length - 1]
@@ -214,7 +219,7 @@ async function reportMain () {
         if (exists) {
           try {
             const currentContent = await fs.readFile(targetFilePath, { encoding: 'utf8' })
-            const newContent = dwd_csv.mergeCSVContents(currentContent, textContent, moment.tz(dateString, 'YYYYMMDD', 'UTC').format('DD.MM.YY'))
+            const newContent = dwdCsv.mergeCSVContents(currentContent, textContent, moment.tz(dateString, 'YYYYMMDD', 'UTC').format('DD.MM.YY'))
             await fs.writeFile(targetFilePath, newContent, { encoding: 'utf8' })
           } catch (error) {
             log.error({ error: error.toString(), url: url }, 'an error occured while reading, merging, and writing the existing file')
@@ -229,7 +234,7 @@ async function reportMain () {
 
               newTable.push(row)
             })
-            await fs.writeFile(targetFilePath, dwd_csv.generateCSV(newTable), { encoding: 'utf8' })
+            await fs.writeFile(targetFilePath, dwdCsv.generateCSV(newTable), { encoding: 'utf8' })
           } catch (error) {
             log.error({ error: error, url: url }, 'an error occured while writing the new file')
           }
@@ -256,24 +261,26 @@ async function crawlMOSMIXasKMZ () {
     // resvolving domain names to IP addresses
     // --> work around: query IP once per cyclce and perform http requests based
     // on the IP instead of the domain name
+    let ipBaseUrl = null
+
     try {
-      var ipBaseUrl = await convertDomainUrlToIPUrl(DWD_MOSMIX_BASE_URL)
+      ipBaseUrl = await convertDomainUrlToIPUrl(DWD_MOSMIX_BASE_URL)
     } catch (error) {
       log.error(error, 'resolving IP-address for DWD_MOSMIX_BASE_URL failed')
       await delay(FORECAST_CRAWL_RETRY_WAIT_MINUTES * 60 * 1000)
       continue
     }
 
-    var listOfStations = null
-    var listOfFiles = []
-    var numberOfFilesDownloaded = 0
+    let listOfStations = null
+    let listOfFiles = []
+    let numberOfFilesDownloaded = 0
 
     // Crawl list of available stations
     for (;;) {
       log.info('crawling list of available stations at ' + ipBaseUrl + '...')
 
       try {
-        listOfStations = await dwd_grib.crawlListOfFilePaths(ipBaseUrl)
+        listOfStations = await dwdGrib.crawlListOfFilePaths(ipBaseUrl)
         break
       } catch (error) {
         log.error(error, 'crawling list of stations failed')
@@ -286,14 +293,14 @@ async function crawlMOSMIXasKMZ () {
     log.info('crawling for MOSMIX_L-forecasts revealed ' + listOfStations.length + ' stations')
 
     // Build list of available .kmz-files
-    for (var i = 0; i < listOfStations.length; i++) {
+    for (let i = 0; i < listOfStations.length; i++) {
       const url = listOfStations[i] + 'kml/'
-      let urlElements = _.split(listOfStations[i], '/')
-      var stationID = urlElements[urlElements.length - 2]
+      const urlElements = _.split(listOfStations[i], '/')
+      const stationID = urlElements[urlElements.length - 2]
       // log.info('crawling available files for station ' + stationID)
 
       try {
-        let files = await dwd_grib.crawlListOfFilePaths(url)
+        const files = await dwdGrib.crawlListOfFilePaths(url)
         listOfFiles = _.concat(listOfFiles, files)
       } catch (error) {
         log.error(error, 'crawling list of files for station ' + stationID + ' failed')
@@ -303,15 +310,15 @@ async function crawlMOSMIXasKMZ () {
     log.info('crawling for MOSMIX_L-forecasts revealed ' + listOfFiles.length + ' files')
 
     // Download all files unless they already exist
-    for (var i = 0; i < listOfFiles.length; i++) {
+    for (let i = 0; i < listOfFiles.length; i++) {
       await delay(1) // wait before processing next file
 
-      let url = listOfFiles[i]
-      var fileName = _.last(_.split(url, '/'))
-      var timeStamp = _.split(fileName, '_')[2]
-      var stationID = _.split(_.split(fileName, '_')[3], '.')[0]
-      var extension = _.split(fileName, '.')[1]
-      var fileNameOnDisk = stationID + '-MOSMIX.' + extension
+      const url = listOfFiles[i]
+      const fileName = _.last(_.split(url, '/'))
+      const timeStamp = _.split(fileName, '_')[2]
+      const stationID = _.split(_.split(fileName, '_')[3], '.')[0]
+      const extension = _.split(fileName, '.')[1]
+      const fileNameOnDisk = stationID + '-MOSMIX.' + extension
 
       const directoryPath = path.join(DOWNLOAD_DIRECTORY_BASE_PATH, 'weather', 'local_forecasts', 'mos', timeStamp)
       const targetFilePath = path.join(directoryPath, fileNameOnDisk)
@@ -323,8 +330,9 @@ async function crawlMOSMIXasKMZ () {
         continue
       }
 
+      let binaryContent = null
       try {
-        var binaryContent = await downloadFile(url)
+        binaryContent = await downloadFile(url)
         log.debug('downloading new forecast ' + fileName)
       } catch (error) {
         log.error({ error: error, url: url }, 'an error occured while downloading ' + fileName)
@@ -351,7 +359,7 @@ async function crawlMOSMIXasKMZ () {
 /**
  * COSMO_D2Main asynchronously downloads the COSMO D2 data in an endless lookup
  */
-async function COSMO_D2Main () {
+async function cosmoD2Main () {
   log.info('start crawling COSMO-D2-forecasts')
   for (;;) {
     // Using the IP address instead of domain is necessary as with each https
@@ -360,24 +368,25 @@ async function COSMO_D2Main () {
     // resvolving domain names to IP addresses
     // --> work around: query IP once per cyclce and perform http requests based
     // on the IP instead of the domain name
+    let ipBaseUrl = null
 
     try {
-      var ipBaseUrl = await convertDomainUrlToIPUrl(DWD_COSMO_D2_BASE_URL)
+      ipBaseUrl = await convertDomainUrlToIPUrl(DWD_COSMO_D2_BASE_URL)
     } catch (error) {
       log.error(error, 'resolving IP-address for DWD_COSMO_D2_BASE_URL failed')
       await delay(COSMO_D2_CRAWL_RETRY_WAIT_MINUTES * 60 * 1000)
       continue
     }
 
-    var listOfFiles = null
-    var numberOfFilesDownloaded = 0
+    let listOfFiles = null
+    let numberOfFilesDownloaded = 0
 
     // step 1: crawl list of available grib2 files
     for (;;) {
       log.info('crawling list of available files at ' + ipBaseUrl + ' ...')
 
       try {
-        listOfFiles = await dwd_grib.crawlListOfGrib2FilePaths(ipBaseUrl)
+        listOfFiles = await dwdGrib.crawlListOfGrib2FilePaths(ipBaseUrl)
         break
       } catch (error) {
         log.error(error, 'crawling list of grib2 files failed')
@@ -390,7 +399,7 @@ async function COSMO_D2Main () {
     log.info('crawling for grib revealed ' + listOfFiles.length + ' files')
 
     // step 2: download and store all files, if they have not been downloaded, yet
-    for (var i = 0; i < listOfFiles.length; i++) {
+    for (let i = 0; i < listOfFiles.length; i++) {
       // wait before processing next file
       await delay(1)
 
@@ -447,5 +456,5 @@ async function COSMO_D2Main () {
 
 // Start three concurrent loops to query MOSMIX, COSMO-D2 and measurement data
 crawlMOSMIXasKMZ()
-COSMO_D2Main()
+cosmoD2Main()
 reportMain()
