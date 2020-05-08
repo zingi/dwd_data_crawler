@@ -35,6 +35,7 @@ const { URL } = require('url')
 const execFile = promisify(require('child_process').execFile)
 const moment = require('moment-timezone')
 const bunyan = require('bunyan')
+const sudpee = require('sudpee')
 
 const DWD_COSMO_D2_BASE_URL = 'https://opendata.dwd.de/weather/nwp/cosmo-d2/grib/'
 const DWD_MOSMIX_BASE_URL = 'https://opendata.dwd.de/weather/local_forecasts/mos/MOSMIX_L/single_stations/'
@@ -48,6 +49,8 @@ const FORECAST_COMPLETE_CYCLE_WAIT_MINUTES = processenv('FORECAST_COMPLETE_CYCLE
 const REPORT_CRAWL_RETRY_WAIT_MINUTES = processenv('REPORT_CRAWL_RETRY_WAIT_MINUTES') || 1
 const REPORT_COMPLETE_CYCLE_WAIT_MINUTES = processenv('REPORT_COMPLETE_CYCLE_WAIT_MINUTES') || 30
 const LOG_LEVEL = String(processenv('LOG_LEVEL') || 'info')
+
+const UDP_BROADCAST_PORT = Number(process.env.UDP_BROADCAST_PORT) || 4000
 
 const ENABLE_REPORT_DOWNLOAD = (process.env.ENABLE_REPORT_DOWNLOAD || 'true').toLowerCase() === 'true'
 const ENABLE_FORECAST_DOWNLOAD = (process.env.ENABLE_FORECAST_DOWNLOAD || 'true').toLowerCase() === 'true'
@@ -239,6 +242,9 @@ async function reportMain () {
     }
     log.info('downloaded ' + numberOfFilesDownloaded + ' new REPORT files')
 
+    // send udp broadcast, that the current weather reports finished downloading
+    await sudpee.send({ crawled: 'reports', count: numberOfFilesDownloaded }, UDP_BROADCAST_PORT)
+
     // wait COMPLETE_CYCLE_WAIT_MINUTES minutes before polling for new files
     log.info('waiting ' + REPORT_COMPLETE_CYCLE_WAIT_MINUTES + ' minutes before starting next reports cycle')
     await delay(REPORT_COMPLETE_CYCLE_WAIT_MINUTES * 60 * 1000)
@@ -346,6 +352,8 @@ async function crawlMOSMIXasKMZ () {
     }
     log.info('downloaded ' + numberOfFilesDownloaded + ' new MOSMIX-forecasts')
 
+    await sudpee.send({ crawled: 'mosmix-forecasts', count: numberOfFilesDownloaded }, UDP_BROADCAST_PORT)
+
     // Wait COMPLETE_CYCLE_WAIT_MINUTES minutes before polling for new files
     log.info('waiting ' + FORECAST_COMPLETE_CYCLE_WAIT_MINUTES + ' minutes before starting next forecast cycle')
     await delay(FORECAST_COMPLETE_CYCLE_WAIT_MINUTES * 60 * 1000)
@@ -443,6 +451,8 @@ async function cosmoDeMain () {
       numberOfFilesDownloaded = numberOfFilesDownloaded + 1
     }
     log.info('downloaded ' + numberOfFilesDownloaded + ' new COSMO-D2-forecasts')
+
+    await sudpee.send({ crawled: 'cosmo-de-forecasts', count: numberOfFilesDownloaded }, UDP_BROADCAST_PORT)
 
     // wait COMPLETE_CYCLE_WAIT_MINUTES minutes before polling for new files
     log.info('waiting ' + COSMO_D2_COMPLETE_CYCLE_WAIT_MINUTES + ' minutes before starting next COSMO-D2 cycle')
