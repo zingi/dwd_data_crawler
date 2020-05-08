@@ -1,0 +1,14 @@
+version: '3.7'
+services: 
+  dwd-data-crawler-test:
+    container_name: dwd-data-crawler-test
+    build: ../../
+    volumes: 
+      - crawler-test-data:/downloads
+    environment: 
+      - ENABLE_REPORT_DOWNLOAD=true
+      - ENABLE_FORECAST_DOWNLOAD=false
+      - ENABLE_COSMO_DOWNLOAD=false
+
+volumes: 
+  crawler-test-data:

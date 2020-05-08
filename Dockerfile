@@ -1,25 +1,23 @@
-FROM node:9.6.1-alpine
+FROM node:13.14.0-alpine3.11
 
-MAINTAINER Florian Wagner
+# install system dependencies
+RUN apk add --no-cache make gcc g++ python bzip2 lz4 bash
 
-RUN apk add --no-cache make gcc g++ python bzip2 lz4
+# create directory for downloaded files
+RUN mkdir /downloads
+ENV DOWNLOAD_DIRECTORY_BASE_PATH=/downloads
 
-RUN mkdir /mnt/downloads && chown node:node /mnt/downloads
+WORKDIR /usr/src/app
 
-ENV DOWNLOAD_DIRECTORY_BASE_PATH=/mnt/downloads
+# install node dependencies
+ADD package.json /usr/src/app/package.json
+ADD package-lock.json /usr/src/app/package-lock.json
+RUN npm i --production
 
-USER node
+# add code
+ADD configuration  /usr/src/app/configuration
+ADD scripts  /usr/src/app/scripts
+ADD lib  /usr/src/app/lib
+ADD index.js  /usr/src/app/index.js
 
-RUN mkdir /home/node/app
-WORKDIR /home/node/app
-
-COPY --chown=node:node ./package.json  ./package-lock.json /home/node/app/
-
-RUN npm install --production
-
-COPY --chown=node:node ./configuration/ /home/node/app/configuration/
-COPY --chown=node:node ./scripts/ /home/node/app/scripts/
-COPY --chown=node:node ./lib /home/node/app/lib/
-COPY --chown=node:node ./index.js /home/node/app/
-
-ENTRYPOINT node index.js
+ENTRYPOINT [ "node", "index.js" ]
