@@ -28,9 +28,9 @@ const dwdCsv = require('./lib/dwd_csv')
 const delay = require('delay')
 const fs = require('fs-extra')
 const processenv = require('processenv')
-const request = require('request-promise-native')
 const path = require('path')
 const lookup = promisify(require('dns').lookup)
+const got = require('got')
 const { URL } = require('url')
 const execFile = promisify(require('child_process').execFile)
 const moment = require('moment-timezone')
@@ -90,7 +90,6 @@ if (_.isNil(DOWNLOAD_DIRECTORY_BASE_PATH)) {
  */
 async function convertDomainUrlToIPUrl (domainUrlString) {
   const domainUrl = new URL(domainUrlString)
-
   let ip = await lookup(domainUrl.hostname)
   ip = ip.address
   domainUrl.hostname = ip
@@ -109,14 +108,7 @@ async function downloadFile (url) {
   let attempts = 0
   for (;;) {
     try {
-      const result = await request({
-        method: 'get',
-        url: url,
-        encoding: null,
-        simple: true,
-        strictSSL: false
-      })
-
+      const result = await got(url, { rejectUnauthorized: false }).buffer()
       return result
     } catch (error) {
       attempts++
