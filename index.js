@@ -363,7 +363,7 @@ async function crawlMOSMIXasKMZ () {
 /**
  * COSMO_D2Main asynchronously downloads the COSMO D2 data in an endless lookup
  */
-async function cosmoDeMain () {
+async function cosmoD2Main () {
   log.info('start crawling COSMO-D2-forecasts')
   for (;;) {
     // Using the IP address instead of domain is necessary as with each https
@@ -452,7 +452,7 @@ async function cosmoDeMain () {
     }
     log.info('downloaded ' + numberOfFilesDownloaded + ' new COSMO-D2-forecasts')
 
-    await sudpee.send({ crawled: 'cosmo-de-forecasts', count: numberOfFilesDownloaded }, UDP_BROADCAST_PORT)
+    await sudpee.send({ crawled: 'cosmo-d2-forecasts', count: numberOfFilesDownloaded }, UDP_BROADCAST_PORT)
 
     // wait COMPLETE_CYCLE_WAIT_MINUTES minutes before polling for new files
     log.info('waiting ' + COSMO_D2_COMPLETE_CYCLE_WAIT_MINUTES + ' minutes before starting next COSMO-D2 cycle')
@@ -462,5 +462,5 @@ async function cosmoDeMain () {
 
 // Start three concurrent loops to query MOSMIX, COSMO-D2 and measurement data
 if (ENABLE_FORECAST_DOWNLOAD) crawlMOSMIXasKMZ()
-if (ENABLE_COSMO_DOWNLOAD) cosmoDeMain()
+if (ENABLE_COSMO_DOWNLOAD) cosmoD2Main()
 if (ENABLE_REPORT_DOWNLOAD) reportMain()
